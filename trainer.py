@@ -65,7 +65,7 @@ class Trainer:
         self.network2 = copy.deepcopy(self.network)
         self.network2.eval()
         # Duplicate current network to distillate info
-        self.network.linear.reset()  # reset the counters for NCM
+        #self.network.linear.reset()  # reset the counters for NCM
         # Prepare internal structure (allocate mean array, etc) for the new classes
         self.network.add_classes(new_classes)
         # Store the new number of classes
@@ -105,11 +105,6 @@ class Trainer:
         count = 0
         print(f"Tau: {self.tau}")
 
-        # very first for the first batch
-        if self.augment_ops is not None and epoch == 0:
-            transform, level = self.augment_ops.get_augment()
-            transform = self.augment_ops.compose(transform, level)
-            train_loader.dataset.set_transform(transform)
 
         for idx, (inputs, targets_prep) in enumerate(train_loader):
             count += 1
@@ -123,123 +118,11 @@ class Trainer:
             optimizer.zero_grad()
             outputs, feat = self.network(inputs)
 
-            if self.self_challenging:
-                x_new = feat.clone().detach()
-                x_new = Variable(x_new.data, requires_grad=True)
-                x_new_view = x_new.mean(-1).mean(-1)
-                x_new_view = x_new_view.view(x_new_view.size(0), -1)
-                output, exponential, _ = self.network.predict(x_new_view)
-                class_num = output.shape[1]
-                index = targets_prep
-                batch_size = x_new.shape[0]
-                num_channel = x_new.shape[1]
-                H = x_new.shape[2]
-                HW = x_new.shape[2] * x_new.shape[3]
-                sp_i = torch.ones([2, batch_size]).long()
-                sp_i[0, :] = torch.arange(batch_size)
-                sp_i[1, :] = index
-                sp_v = torch.ones([batch_size])
-                one_hot_sparse = torch.sparse.FloatTensor(sp_i, sp_v,
-                                                          torch.Size([batch_size, class_num])).to_dense().cuda()
-                one_hot_sparse = Variable(one_hot_sparse, requires_grad=False)
-                one_hot = torch.sum(output * one_hot_sparse)
-                optimizer.zero_grad()
-                one_hot.backward()
-                grads_val = x_new.grad.clone().detach()
-                grad_channel_mean = torch.mean(grads_val.view(batch_size, num_channel, -1), dim=2)
-                channel_mean = grad_channel_mean
-                spatial_mean = torch.mean(grads_val, dim=1)
-                spatial_mean = spatial_mean.view(batch_size, H, H).view(batch_size, HW)
-                optimizer.zero_grad()
+            #print(np.shape(outputs), np.shape(feat))
 
-                choose_one = random.randint(0, 9)
-                if choose_one <= 4:
-                    # ---------------------------- spatial -----------------------
-                    spatial_drop_num = int(HW * 1 / 3)
-                    th_mask_value = torch.sort(spatial_mean, dim=1, descending=True)[0][:, spatial_drop_num]
-                    th_mask_value = th_mask_value.view(batch_size, 1).expand(batch_size, HW)
-                    mask_all_cuda = torch.where(spatial_mean >= th_mask_value, torch.zeros(spatial_mean.shape).cuda(),
-                                                torch.ones(spatial_mean.shape).cuda())
-                    mask_all = mask_all_cuda.detach().cpu().numpy()
-                    for q in range(batch_size):
-                        mask_all_temp = np.ones((HW), dtype=np.float32)
-                        zero_index = np.where(mask_all[q, :] == 0)[0]
-                        num_zero_index = zero_index.size
-                        if num_zero_index >= spatial_drop_num:
-                            dumy_index = npr.choice(zero_index, size=spatial_drop_num, replace=False)
-                        else:
-                            zero_index = np.arange(HW)
-                            dumy_index = npr.choice(zero_index, size=spatial_drop_num, replace=False)
-                        mask_all_temp[dumy_index] = 0
-                        mask_all[q, :] = mask_all_temp
-                    mask_all = torch.from_numpy(mask_all.reshape(batch_size, 16, 16)).cuda()
-                    mask_all = mask_all.view(batch_size, 1, 16, 16)
-                else:
-                # -------------------------- channel ----------------------------
-                    mask_all = torch.zeros((batch_size, num_channel, 1, 1)).cuda()
-                    vector_thresh_percent = int(num_channel * 1 / 3.1)
-                    vector_thresh_value = torch.sort(channel_mean, dim=1, descending=True)[0][:, vector_thresh_percent]
-                    vector_thresh_value = vector_thresh_value.view(batch_size, 1).expand(batch_size, num_channel)
-                    vector = torch.where(channel_mean > vector_thresh_value,
-                                         torch.zeros(channel_mean.shape).cuda(),
-                                         torch.ones(channel_mean.shape).cuda())
-                    vector_all = vector.detach().cpu().numpy()
-                    channel_drop_num = int(num_channel * 1 / 3.2)
-                    vector_all_new = np.ones((batch_size, num_channel), dtype=np.float32)
-                    for q in range(batch_size):
-                        vector_all_temp = np.ones((num_channel), dtype=np.float32)
-                        zero_index = np.where(vector_all[q, :] == 0)[0]
-                        num_zero_index = zero_index.size
-                        if num_zero_index >= channel_drop_num:
-                            dumy_index = npr.choice(zero_index, size=channel_drop_num, replace=False)
-                        else:
-                            zero_index = np.arange(num_channel)
-                            dumy_index = npr.choice(zero_index, size=channel_drop_num, replace=False)
-                        vector_all_temp[dumy_index] = 0
-                        vector_all_new[q, :] = vector_all_temp
-                    vector = torch.from_numpy(vector_all_new).cuda()
-                    for m in range(batch_size):
-                        index_channel = vector[m, :].nonzero()[:, 0].long()
-                        index_channel = index_channel.detach().cpu().numpy().tolist()
-                        mask_all[m, index_channel, :, :] = 1
-
-                    # ----------------------------------- batch ----------------------------------------
-                    cls_prob_before = F.softmax(output, dim=1)
-                    x_new_view_after = x_new * mask_all
-
-                    x_new_view_after = x_new_view_after.mean(-1).mean(-1)
-                    x_new_view_after = x_new_view_after.view(x_new_view_after.size(0), -1)
-                    x_new_view_after, _, _ = self.network.predict(x_new_view_after)
-
-                    cls_prob_after = F.softmax(x_new_view_after, dim=1)
-
-                    sp_i = torch.ones([2, batch_size]).long()
-                    sp_i[0, :] = torch.arange(batch_size)
-                    sp_i[1, :] = index
-                    sp_v = torch.ones([batch_size])
-                    one_hot_sparse = torch.sparse.FloatTensor(sp_i, sp_v,
-                                                              torch.Size([batch_size, class_num])).to_dense().cuda()
-                    before_vector = torch.sum(one_hot_sparse * cls_prob_before, dim=1)
-                    after_vector = torch.sum(one_hot_sparse * cls_prob_after, dim=1)
-                    change_vector = before_vector - after_vector - 0.0001
-                    change_vector = torch.where(change_vector > 0, change_vector,
-                                                torch.zeros(change_vector.shape).cuda())
-                    th_fg_value = torch.sort(change_vector, dim=0, descending=True)[0][
-                        int(round(float(batch_size) * 1 / 3))]
-                    drop_index_fg = change_vector.gt(th_fg_value)
-                    ignore_index_fg = 1 - drop_index_fg
-                    not_01_ignore_index_fg = ignore_index_fg.nonzero()[:, 0]
-                    mask_all[not_01_ignore_index_fg.long(), :] = 1
-
-                    self.network.train()
-                    mask_all = Variable(mask_all, requires_grad=True)
-                    feat = feat * mask_all
-
-                    feat = feat.mean(-1).mean(-1)
-                    outputs = feat.view(feat.size(0), -1)
 
             prediction, exp, distances = self.network.predict(outputs)  # prediction from NCM
-
+            #print(np.shape(prediction), type(prediction))
             loss_bx = self.ce_weight * self.ce(exp, targets_prep) + \
                       self.snnl_weight * self.snnl(outputs, targets_prep) + \
                       self.bce_weight * self.bce(prediction, targets)
@@ -250,97 +133,42 @@ class Trainer:
                 outputs_old = outputs_old.detach()
                 loss_bx = loss_bx + self.features_dw * (self.distill_loss(outputs, outputs_old))
 
-            # if self supervision
-            if self.ss_weight:
-                inputs_ss = []
-                targets_ss = []
-                for index in range(len(inputs)):
-                    ss_transformation = np.random.randint(self.discriminator.n_classes)
-                    sample = inputs[index]
-                    label = 0
-                    if ss_transformation == 0:
-                        pass
-                    elif ss_transformation == 1:
-                        sample = torch.rot90(sample, k=1, dims=[1,2])
-                        label = 1
-                    elif ss_transformation == 2:
-                        sample = torch.rot90(sample, k=2, dims=[1,2])
-                        label = 2
-                    elif ss_transformation == 3:
-                        sample = torch.rot90(sample, k=3, dims=[1,2])
-                        label = 3
-                    else:
-                        raise NotImplementedError("Rotation invalid")
-                    inputs_ss.append(sample)
-                    targets_ss.append(label)
-
-                inputs_ss = torch.stack(inputs_ss).to(self.device)
-                _, feat_ss = self.network(inputs_ss)
-                double_output = torch.cat((feat, feat_ss), 1)
-                double_output = double_output.view(feat.size(0), -1)
-
-                targets_prep_ss = torch.tensor(np.asarray(targets_ss)).to(self.device)
-
-                p0 = self.discriminator(double_output)
-                loss_rotation = self.ss_weight * self.ce(p0, targets_prep_ss)
-                loss_bx = loss_bx + loss_rotation
-                ss_loss += loss_rotation.item()
 
             if iteration == 0 or not self.nno and not (epoch == 0 and idx == 0):
-                loss_bx.backward()
-                optimizer.step()
+                loss_bx.backward() #calcula o gradiente para todos os parametros x a serem otimizados
+                optimizer.step() #atualiza x com o gradiente obtido anteriormente
                 train_loss += loss_bx.item()
 
             # ## UPDATE MEANS ###
             # For the just learned classes it computes the online (moving) mean
-            self.network.update_means(outputs, targets_prep.to('cpu'))
+                self.network.update_means(outputs, targets_prep.to('cpu'))
 
-            if not self.deep_nno and not self.nno:
-                self.tau.data = self.network.linear.get_average_dist(dim=-1)
+            #if not self.deep_nno and not self.nno:
+            #    self.tau.data = self.network.linear.get_average_dist(dim=-1)
 
             if self.deep_nno or (iteration == 0 and self.nno):
                 # Update tau parameters
                 self.deep_nno_handler.update_taus(prediction, targets_prep, self.num_classes)
+                #testar outra função para calculo de tau já que bm = False
 
-            if self.augment_ops is not None:
 
-                go = False
-                if self.dataset == 'rgbd-dataset' or self.dataset == 'arid':
-                    if iteration == 0 and (((idx * 128 + 1) % 2048)) and epoch <= 2:
-                        if idx == 0 and (epoch == 0 or (epoch % (self.epochs // 2 + 1))):
-                            go = True
-
-                else:
-                    if iteration == 0 and (((idx * 128 + 1) % 2048)) and epoch <= 2:
-                        if idx == 0 and (epoch == 0 or (epoch % (self.epochs // 2 + 1))):
-                            go = True
-                if go:
-                    transformations, levels = self.augment_ops.random_search(string_length=5,
-                                                                             compute_fitness_f=self.test_closed_world,
-                                                                             trainloader=subset_trainloader)
-                    self.augment_ops.add_augment(transformations, levels)
-
-                # for the batches != from first one
-                transform, level = self.augment_ops.get_augment()
-                transform = self.augment_ops.compose(transform, level)
-                train_loader.dataset.set_transform(transform)
 
             # Display loss and accuracy
             _, predicted = prediction.max(1)
+            #print(predicted)
             total += targets_prep.size(0)
+            #print(targets_prep)
             correct += predicted.eq(targets_prep).sum().item()
-            if self.ss_weight:
-                _, ss_predicted = p0.max(1)
-                ss_correct += ss_predicted.eq(targets_prep_ss).sum().item()
 
-            if count % 20 == 0:
+
+            if count % 2 == 0: #2 == 0
                 print(f'[{int((100. * idx) / len(train_loader)):03d}%] == Loss: {train_loss / count:.3f}, '
                       f'Acc: {100. * correct / total:.3f} [{correct}/{total}]')
 
         self.logger.log_training(epoch, train_loss / len(train_loader), 100. * correct / total, iteration)
 
-        if self.ss_weight:
-            self.logger.log_ss(epoch, ss_loss / len(train_loader), 100. * ss_correct / total, iteration)
+        #if self.ss_weight:
+        #    self.logger.log_ss(epoch, ss_loss / len(train_loader), 100. * ss_correct / total, iteration)
 
     def test_closed_world(self, test_loader, display=True):
         self.network.eval()
@@ -350,6 +178,7 @@ class Trainer:
 
         with torch.no_grad():
             for idx, (inputs, targets_prep) in enumerate(test_loader):
+                #print('targets_prep:', targets_prep)
                 count += 1
                 inputs = inputs.to(self.device)
                 outputs, _= self.network(inputs)
@@ -389,7 +218,8 @@ class Trainer:
                 # changes the probabilities (distances) for known and unknown
                 new_outputs = self.reject(outputs, distances, self.tau)
                 _, predicted = new_outputs.max(1)
-
+                #print(f'count: {count}, labels: {targets_prep}')
+                #print(f'output: {outputs}  ,  new_output: {new_outputs}' )
                 # last_class is unknown class
                 unk += (targets_prep == last_class).sum().item()
                 # true positive
@@ -426,6 +256,108 @@ class Trainer:
               f"\n\t Min Dist {stat_distances[0] / total:.2f}, Max Dist {stat_distances[1] / total:.2f}, Mean Dist {stat_distances[2] / total:.2f}")
 
         return acc, precision, recall, f1score, rejected, unk
+
+    def test_OWR(self, test_loader, last_class):
+        print(f"Final Tau: {self.tau.data.cpu().numpy()}")
+
+        self.network.eval()
+        correct = 0
+        total = 0
+        count = 0
+        unk = 0.
+        tp = 0.
+        rejected = 0.
+        total_rejected = 0.
+        stat_distances = [0., 0., 0.]
+        stat_pred = [0., 0., 0.]
+        sel_objs = []
+        score_objs = []
+
+        with torch.no_grad():
+            for idx, (inputs, targets_prep) in enumerate(test_loader):
+                count += 1
+
+                inputs = inputs.to(self.device)
+                outputs,_ = self.network(inputs)
+                outputs, _, distances = self.network.predict(outputs)
+                targets_prep = targets_prep.to(outputs.device)
+                # changes the probabilities (distances) for known and unknown
+
+                new_outputs = self.reject(outputs, distances, self.tau)
+                #print(new_outputs)
+                _, predicted = new_outputs.max(1)
+                #print(f'count: {count}, labels: {targets_prep}')
+                #print(f'output: {outputs}  ,  new_output: {new_outputs}' )
+                # last_class is unknown class
+                #unk += (targets_prep == last_class).sum().item()
+                #print(new_outputs, type(new_outputs))
+                if idx == 0:
+                    indices = np.where(predicted == last_class)[0]
+
+                    sel_objs.extend(indices)
+                    new_outputs_copy = new_outputs.detach().cpu().numpy()
+                    score_objs.extend(new_outputs_copy[indices, last_class])
+                    '''
+                    indices = [x for x in indices if targets_prep[x] == last_class]
+                    if indices != [None] and indices!= []:
+                        sel_objs.extend(indices)
+                        new_outputs_copy = new_outputs.detach().cpu().numpy()
+                        score_objs.extend(new_outputs_copy[indices,last_class])
+                    '''
+
+                else:
+                    indices = np.where(predicted == last_class)[0]
+
+                    new_outputs_copy = new_outputs.detach().cpu().numpy()
+                    sel_objs.extend(indices + 15 * idx)
+                    score_objs.extend(new_outputs_copy[indices, last_class])
+                    '''
+                    indices = [x for x in indices if targets_prep[x] == last_class]
+                    if indices != [None] and indices!= []:
+                        indices = np.array(indices)
+                        new_outputs_copy = new_outputs.detach().cpu().numpy()
+                        sel_objs.extend(indices + 15*idx)
+                        score_objs.extend(new_outputs_copy[indices,last_class])
+                    '''
+
+
+                rejected += (predicted == last_class).sum().item()
+
+                total += inputs.size(0)
+
+
+                if last_class in targets_prep:
+
+                    np_vr = targets_prep.detach().cpu().numpy()
+                    id = np.where(np_vr == last_class)
+                    np_vr[id] = 1E10
+                    targets_prep = torch.from_numpy(np_vr)
+                    #print(targets_prep)
+                    correct += predicted.eq(targets_prep).sum().item()
+                else:
+
+                    correct += predicted.eq(targets_prep).sum().item()
+
+
+                total_rejected += new_outputs[predicted == last_class].sum()
+
+            #print(sel_objs, len(sel_objs))
+            #print(score_objs, len(score_objs))
+
+            sel_objs = np.array(sel_objs)
+            score_objs = np.array(score_objs)
+
+            sel = score_objs.argsort()[-5:][::-1]
+
+            sel_objs = sel_objs[sel]
+            print(sel_objs)
+
+
+        acc = 100. * correct / total
+        print(f'rejected: {rejected}')
+        print(f"Accuracy: {acc:.2f}; Rej Rate {rejected / total:.2f}, Avg Pred Rej {total_rejected / total:.2f}")
+
+        return acc, rejected, sel_objs
 
     def valid(self, epoch, valid_loader, optimizer, iteration, class_dict):
         self.network.eval()

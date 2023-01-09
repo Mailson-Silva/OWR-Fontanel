@@ -8,7 +8,7 @@ class NCM_classifier(nn.Module):
         self.means = nn.Parameter(torch.zeros(num_classes, features), requires_grad=False)
         self.mean_distance = nn.Parameter(torch.zeros(num_classes), requires_grad=False)
         self.running_means = nn.Parameter(torch.zeros(num_classes, features), requires_grad=False)
-        self.counter_means = nn.Parameter(torch.zeros(num_classes), requires_grad=False).cuda()
+        self.counter_means = nn.Parameter(torch.zeros(num_classes), requires_grad=False)##.cuda()
         self.features = features
         self.classes = num_classes
         self.variance = nn.Parameter(torch.zeros(1)-1, requires_grad=False)
@@ -54,7 +54,7 @@ class NCM_classifier(nn.Module):
     @staticmethod
     def compute_mean(x, y, i, weight):
         mask = (i == y.data).view(-1, 1).float()
-        mask = mask.cuda()
+        mask = mask#.cuda()
         N = mask.sum()  # num of imgs of class i in the batch
         if weight is not None:
             mask = mask * weight
@@ -89,14 +89,17 @@ class NCM_classifier(nn.Module):
                 # if there is not a mean for that class
                 if self.counter_means[i] == 0:
                     # add the mean
+                    #print(f'ACRESCENTA NO NCM A MÉDIA DA CLASSE {i}')
                     self.means.data[i, :] = mean / N
                     # for each sample of the batch compute the distance from the mean of the i-th class
                     dist = self.compute_dist(x, mean)
                     # select from the batch only the sample of class i. For them, average the distances they have from
                     # the mean of their class. Here there is the sum since there are no previous stored distances
                     self.mean_distance.data[i] = dist[y == i].sum()
+
                 else:
                     # if there already is a mean for that class, update it with the new batch
+                    #print(f'ATUALIZA NO NCM A MÉDIA DA CLASSE {i}')
                     self.means.data[i, :] = (self.means.data[i, :] * alpha + mean * (1-alpha) / N)
                     dist = self.compute_dist(x, self.means.data[i, :])
                     mean_dist = dist[y == i].mean()
@@ -109,17 +112,17 @@ class NCM_classifier(nn.Module):
         return self.mean_distance
 
     def reset(self):
-        self.counter_means = nn.Parameter(torch.zeros(self.classes), requires_grad=False).cuda()
+        self.counter_means = nn.Parameter(torch.zeros(self.classes), requires_grad=False)#.cuda()
 
     def add_classes(self, new_classes):
-        new_class_means = torch.zeros(new_classes, self.features).cuda()
-        new_class_counters = torch.zeros(new_classes).cuda()  # Class Means
-        new_running_means = torch.zeros(new_classes, self.features).cuda()
-        new_mean_dist = torch.zeros(new_classes).cuda()
+        new_class_means = torch.zeros(new_classes, self.features)#.cuda()
+        new_class_counters = torch.zeros(new_classes)#.cuda()  # Class Means
+        new_running_means = torch.zeros(new_classes, self.features)#.cuda()
+        new_mean_dist = torch.zeros(new_classes)#.cuda()
         self.means = nn.Parameter(torch.cat((self.means.data, new_class_means), 0), requires_grad=False)
         self.running_means = nn.Parameter(torch.cat((self.running_means.data, new_running_means), 0),
                                           requires_grad=False)
-        self.counter_means = torch.cat((self.counter_means, new_class_counters), 0)
+        self.counter_means = nn.Parameter(torch.cat((self.counter_means, new_class_counters), 0),requires_grad=False)
         self.mean_distance = nn.Parameter(torch.cat((self.mean_distance, new_mean_dist), 0), requires_grad=False)
 
         print(f"Adding new classes to NCM: from {self.classes} to {self.classes + new_classes}")

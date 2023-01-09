@@ -37,3 +37,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     unpack_instances(args.path, args.dataset)
+    #unpack_instances('/home/mailson/PycharmProjects/OWR/OWR-VisualDomains/data/','arid_40k_dataset_crops')

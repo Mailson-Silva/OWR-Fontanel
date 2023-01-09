@@ -5,6 +5,8 @@ import os.path
 import sys
 import torchvision.transforms as T
 import torch
+import skimage.io
+from skimage.io import imread_collection
 import numpy as np
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
@@ -194,6 +196,8 @@ class LightFilteredDatasetFolder(data.Dataset):
                 target = self.target_transform[target]
             else:
                 target = len(self.target_transform.keys())
+
+            print(sample,target)
         return sample, target
 
     def get_samples_class(self, y):
@@ -237,6 +241,7 @@ class RODFolder(FilteredDatasetFolder):
 
         return classes, class_to_idx
 
+    '''
     def make_dataset(self, dir, split, classes):
         path = dir.split("/")[:-2]
         split_file = np.genfromtxt(f'{path[0]}/{path[1]}/additionals/{split}.txt', dtype='unicode')
@@ -248,9 +253,66 @@ class RODFolder(FilteredDatasetFolder):
 
             if label not in classes:
                 continue
-            images.append((dir+path, label))
+            images.append((dir + path, label))
 
         return images
 
     def __len__(self):
         return len(self.samples)
+    '''
+
+
+    def make_dataset(self, dir, split, classes):
+        path = dir.split("/")[:-2]
+        print(dir, split, classes)
+        #split_file = np.genfromtxt(f'{path[0]}/{path[1]}/additionals/{split}.txt', dtype='unicode')
+        images = []
+
+        dir_path = dir+'/*.png'
+        images_path = dir
+
+        files = os.listdir(images_path)
+        files = np.sort(files)
+
+        img_labels = []
+        data = []
+
+        for txt in files:
+            if len(txt.split('.')) == 2:
+                n = int(txt.split('.')[0][-1])  # obtem a classe da imagem pelo ultimo caracter do nome do arquivo
+                img_labels.append(int(n + 1))
+                data.append(dir+'/'+txt)
+
+        #img_labels = np.array(img_labels)
+        #data = np.array(data)
+
+
+        #col_img = imread_collection(dir_path)
+        #print(col_img)
+        #col_img = col_img.concatenate()
+
+        unique_class, nb_samples = np.unique(img_labels,return_counts=True)
+
+
+        for j in unique_class:
+            if j in classes:
+                ind = np.where(img_labels == j)[0]
+
+                n_samples = round(len(ind)*0.2)
+                if split == 'train':
+                    ind = ind[:n_samples]
+                elif split == 'test':
+                    ind = ind[n_samples:]
+
+                for k in ind:
+                    images.append((data[k], img_labels[k]))
+
+        #print(images)
+ 
+
+
+        return images
+
+    def __len__(self):
+        return len(self.samples)
+

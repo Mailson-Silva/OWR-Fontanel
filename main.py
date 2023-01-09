@@ -1,4 +1,5 @@
 import numpy as np
+import pip
 import torch
 import torch.optim as optim
 import torchvision.transforms as transforms
@@ -14,6 +15,16 @@ import random
 from data_loader import RODFolder, LightFilteredDatasetFolder
 from logger import TensorboardXLogger
 from trainer import Trainer
+
+
+def import_or_install(library):
+    try:
+        __import__(library)
+        print(f'Module {library} is installed')
+    except ModuleNotFoundError:
+        print(f"module {library} is not installed")
+        pip.main(['install', library])
+
 
 
 def save_ckpt(path, model, trainer):
@@ -32,7 +43,8 @@ def create_log_folder(log):
 def make_dataset(opts):
     full_order = np.load(opts.dataset_path + '/fixed_order.npy')
 
-    if opts.dataset == 'rgbd-dataset':
+
+    if opts.dataset == 'dataset-1':
         opts.data_class = RODFolder
         opts.batch_size = 128 if opts.batch_size == -1 else opts.batch_size
         opts.valid_batchsize = 64 if opts.valid_batchsize == -1 else opts.valid_batchsize
@@ -41,56 +53,8 @@ def make_dataset(opts):
             transforms.RandomCrop(64, padding=8, padding_mode='edge'),
 
         ])
-        if not opts.search and opts.ss_weight:
-            transform_train = transforms.Compose([transform_train,
-                                                      transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5), ])
-                
-        transform_train = transforms.Compose([transform_train,
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (1., 1., 1.)),
-        ])
 
-        transform_basic = transforms.Compose([
-            transforms.Resize((64, 64)),
-            transforms.RandomCrop(64, padding=8, padding_mode='edge'),
-            transforms.RandomHorizontalFlip(),
-        ])
 
-        transform_val = transforms.Compose([
-            transforms.Resize((64, 64)),
-            transforms.RandomCrop(64, padding=8, padding_mode='edge'), ])
-        if not opts.no_tau_val:
-            transform_val = transforms.Compose([transform_val,
-                                                transforms.ColorJitter(brightness=0.1, saturation=0.1, hue=0.1), ])
-        transform_val = transforms.Compose([transform_val,
-                                            transforms.RandomHorizontalFlip(),
-                                            transforms.ToTensor(),
-                                            transforms.Normalize((0.5, 0.5, 0.5), (1., 1., 1.)),
-                                            ])
-
-        transform_test = transforms.Compose([
-            transforms.Resize((64, 64)),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (1., 1., 1.)),
-        ])
-        dataset_path = opts.dataset_path + '/rgbd-dataset/rgbd-dataset_reorganized/'
-        test_dataset_paths = [dataset_path]
-        if not opts.search:
-            test_dataset_paths = [f'{opts.dataset_path}/{test}/{test}_reorganized/' for test in opts.test]
-
-    elif opts.dataset == 'synARID_crops_square':
-        opts.data_class = RODFolder
-        opts.batch_size = 128 if opts.batch_size == -1 else opts.batch_size
-        opts.valid_batchsize = 64 if opts.valid_batchsize == -1 else opts.valid_batchsize
-        transform_train = transforms.Compose([
-            transforms.Resize((64, 64)),
-            transforms.RandomCrop(64, padding=8, padding_mode='edge'),
-
-        ])
-        if not opts.search and opts.ss_weight:
-            transform_train = transforms.Compose([transform_train,
-                                                      transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5), ])
         transform_train = transforms.Compose([transform_train,
                                               transforms.RandomHorizontalFlip(),
                                               transforms.ToTensor(),
@@ -106,9 +70,7 @@ def make_dataset(opts):
         transform_val = transforms.Compose([
             transforms.Resize((64, 64)),
             transforms.RandomCrop(64, padding=8, padding_mode='edge'), ])
-        if not opts.no_tau_val:
-            transform_val = transforms.Compose([transform_val,
-                                                transforms.ColorJitter(brightness=0.1, saturation=0.1, hue=0.1), ])
+
         transform_val = transforms.Compose([transform_val,
                                             transforms.RandomHorizontalFlip(),
                                             transforms.ToTensor(),
@@ -120,11 +82,14 @@ def make_dataset(opts):
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (1., 1., 1.)),
         ])
-        dataset_path = opts.dataset_path + '/synARID_crops_square/synARID_crops_square_reorganized/'
+        dataset_path = opts.dataset_path + '/dataset_eucapytus/dataset-1'
+        # '/arid_40k_dataset_crops/arid_40k_dataset_crops_reorganized/'
         test_dataset_paths = [dataset_path]
+        '''
         if not opts.search:
             test_dataset_paths = [f'{opts.dataset_path}/{test}/{test}_reorganized/' for test in opts.test]
-
+            
+        '''
     elif opts.dataset == 'arid_40k_dataset_crops':
         opts.data_class = RODFolder
         opts.batch_size = 128 if opts.batch_size == -1 else opts.batch_size
@@ -134,11 +99,12 @@ def make_dataset(opts):
             transforms.RandomCrop(64, padding=8, padding_mode='edge'),
 
         ])
-        
+
         if not opts.search and opts.ss_weight:
             transform_train = transforms.Compose([transform_train,
-                                                      transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5), ])
-        
+                                                  transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5,
+                                                                         hue=0.5), ])
+
         transform_train = transforms.Compose([transform_train,
                                               transforms.RandomHorizontalFlip(),
                                               transforms.ToTensor(),
@@ -255,6 +221,7 @@ def get_search_params(opts, param_name, param_value, best):
         opts.tau_lr = param_value
     return opts
 
+
 def get_params(opts):
     if opts.search:
         opts.epochs_init = 12
@@ -267,16 +234,15 @@ def get_params(opts):
         opts.CLASSES = 11
     else:
         # standard OWR
-        opts.initial_classes = 11
-        opts.incremental_classes = 5
-        opts.CLASSES = 51
-        opts.unk = 25
-        opts.unk_step = 5
+        opts.initial_classes = 2#2
+        opts.incremental_classes = 1#1
+        opts.CLASSES = 3#3
+        opts.unk = 1#1
+        opts.unk_step = 1#1
         opts.validation_size = 50
-        opts.orders = 5
-        opts.epochs_init = 12 if opts.epochs_init == -1 else opts.epochs_init
-        opts.epochs = int(
-            opts.epochs_init * opts.incremental_classes / opts.initial_classes) if opts.epochs == -1 else opts.epochs
+        opts.orders = 1#1
+        opts.epochs_init = 10 if opts.epochs_init == -1 else opts.epochs_init
+        opts.epochs = int(opts.epochs_init * opts.incremental_classes / opts.initial_classes) if opts.epochs == -1 else opts.epochs
 
         if opts.rsda:
             opts.epochs_init = 25
@@ -292,11 +258,13 @@ def get_params(opts):
 
     return opts
 
+
 def load(opts):
     print("\nLoading best configuration...\n")
 
     # load the .npy
-    config_path = os.path.realpath(".") + f'/{opts.dataset_path}/{opts.dataset}/additionals/{opts.config}'
+    config_path = os.path.realpath(".") + f'/{opts.dataset_path}/dataset_eucapytus/{opts.dataset}/additionals/{opts.config}'
+    #config_path = os.path.realpath(".") + f'/{opts.dataset_path}/{opts.dataset}/additionals/{opts.config}'
     assert os.path.exists(config_path), f"Error, {config_path} does not exist. "
     best = np.load(config_path, allow_pickle=True).item()
 
@@ -322,6 +290,7 @@ def load(opts):
     print(f"\nConfiguration /{opts.config}/ loaded\n")
 
     return opts
+
 
 def perform_search(opts):
     print("\nStarting search...\n")
@@ -392,15 +361,17 @@ def main(opts, search_params=None):
     batch_size = opts.batch_size  # Batch size
     nb_initial = opts.initial_classes  # Classes in initial group
     nb_cl = opts.incremental_classes  # Classes per group
-    nb_orders = opts.orders # Orders to perform
+    nb_orders = opts.orders  # Orders to perform
     epochs_strat = [80]  # Epochs where learning rate gets decreased
     lr_factor = opts.lr_factor  # Learning rate decrease factor
     wght_decay = opts.decay  # Weight Decay
+    del_objs = []
     print(opts)
 
     # set up metrics
-    icl_steps = int((opts.CLASSES - nb_initial - opts.unk) / nb_cl + 1) if nb_cl != 0 else 1
-    measures = int(2 + opts.unk / opts.unk_step) if opts.unk_step != 0 else 2
+    #icl_steps = int((opts.CLASSES - nb_initial - opts.unk) / nb_cl + 2) if nb_cl != 0 else 1 #icl_steps = 1
+    icl_steps = 10
+    measures = int(2 + opts.unk / opts.unk_step) if opts.unk_step != 0 else 2 #measures = 3
     top1_acc_list = {}
     for test in test_datasets:
         top1_acc_list.update({test: np.zeros((icl_steps, measures, nb_orders))})
@@ -427,6 +398,7 @@ def main(opts, search_params=None):
 
         class_dict = {}  # dictionary of class - inverted order
         order = full_order[nb_cl][:(opts.CLASSES)] if opts.search else full_order[iteration_total]
+        order = np.array([1,2,3])
         print(order)
 
         print(f'Order {iteration_total} starting ...')
@@ -438,63 +410,103 @@ def main(opts, search_params=None):
         discriminator = networks.Discriminator(batch_size=batch_size, n_feat=256, n_classes=4).to(device)
 
         # setup trainer
-        augment_ops = AugmentOps(transform_basic) if opts.rsda else None
+        augment_ops = AugmentOps(transform_basic) if opts.rsda else None #augment_ops = None, para NNO
         trainer = Trainer(opts, network, discriminator, device, logger, augment_ops)
         exemplar_handler = Exemplars(network, device)
-
+        class_count = 0
         # ## INCREMENTAL TRAINING ##
         # Incremental step: in each step the model learns new classes
         for iteration in range(icl_steps):
             # Prepare the training data for the current batch of classes
-            start_class = (iteration > 0) * (nb_initial + (iteration - 1) * nb_cl)
-            last_class = nb_initial + iteration * nb_cl
-            actual_cl = order[range(start_class, last_class)]
+
+            #start_class = (iteration > 0) * (nb_initial + (iteration - 1) * nb_cl) #start_class = 0
+            #last_class = nb_initial + iteration * nb_cl #last_class = 2
+            #actual_cl = order[start_class: last_class] #actual_cl = [1,2]
+            #class_count += len(actual_cl)
+            if iteration == 0:
+                start_class=0
+                last_class=2
+                actual_cl = [1,2]
+                class_count = 2
+            else:
+                start_class = 2
+                last_class = 3
+                actual_cl = [3]
+                class_count = 3
+
+
+            #if opts.dataset == 'dataset-1':
+             #   actual_cl = [1, 2]
 
             for i, el in enumerate(actual_cl):
                 class_dict[el] = i + start_class  # dict: class : index. (Es. 4:0, 7:1, ...)
 
             # make the new dataset
-            train_set = opts.data_class(root=dataset_path, split='train', classes=actual_cl,
+            if iteration == 0:
+                train_set = opts.data_class(root=dataset_path, split='train', classes=actual_cl,
                                         target_transform=class_dict, transform=transform_train)
-            val_set = opts.data_class(root=dataset_path, split='val', classes=actual_cl,
-                                      target_transform=class_dict, transform=transform_test)
-            if not opts.search:
-                train_set.samples.extend(val_set.samples)
+                known_classes = np.unique([h[1] for h in train_set.samples])
+                print(f'\n CLASSES CONHECIDAS: {known_classes}\n')
 
-            # if bdoc
-            if not opts.no_tau_val:
-                set_tau = train_set.reduce(opts.validation_size)
-                val_set_tau = LightFilteredDatasetFolder(samples=set_tau, target_transform=class_dict,
-                                                         transform=transform_val)
+                #print(train_set, type(train_set))
+            else:
+
+                train_set = opts.data_class(root=test_dataset, split='val' if opts.search else 'test',
+                                          classes=order, target_transform=class_dict,
+                                          transform=transform_test)
+
+                #print(inc_set.samples, type(inc_set.samples))
+                for i in range(len(del_objs)):
+                    if i == len(del_objs)-1:
+                        train_set.samples = np.array(train_set.samples)[sel_objs].tolist()  # carrega as amostras de treino
+                        train_set.samples = [(i[0], int(i[1])) for i in train_set.samples]
+                        # print(train_set, type(train_set))
+                        random.shuffle(train_set.samples)  # embaralha as amostras de treino
+                    else:
+                        train_set.samples = np.delete(np.array(train_set.samples), del_objs[i], axis=0)
+
+                aux = np.unique([h[1] for h in train_set.samples])
+                new_class = [f for f in aux if f not in known_classes]
+                print(f'\n CLASSES NOVA: {new_class}\n')
+                print(f'\n CLASSES CONHECIDAS: {known_classes}\n')
+                #train_set = LightFilteredDatasetFolder(samples=train_set.samples,target_transform=class_dict, transform=None)
+
+            #print(train_set.samples, np.shape(train_set.samples))
+            #val_set = opts.data_class(root=dataset_path, split='val', classes=actual_cl,
+              #                       target_transform=class_dict, transform=transform_test)
+
+            #if not opts.search:
+            #    train_set.samples.extend(val_set.samples)
+            #print(train_set, type(train_set))
+
 
             sampler = None
             shuffle = True
             # If iteration is > 0 then the batch should be weighted between old and new
-            if iteration > 0 and not opts.nno:  # make exemplars weighted
-                len_no_ex = len(train_set.samples)
-                ex_samples = exemplar_handler.get_exemplar_samples()
-                train_set.samples.extend(ex_samples)
-                len_with_ex = len(train_set.samples)
-                weights = np.ones(len_with_ex)
-                weights[len_no_ex:] *= opts.ratio / ((len_with_ex - len_no_ex + 0.0) / len_with_ex)
 
-                shuffle = False
-                sampler = WeightedRandomSampler(weights=weights, num_samples=len_with_ex)
 
             trainloader = DataLoader(train_set, batch_size=batch_size, shuffle=shuffle,
                                      num_workers=opts.workers, sampler=sampler)
+            #print(f'trainloader: {trainloader}')
+
+            #dataloader cria um objeto iterativo sobre o dataset, formando batches
+
 
             # Setup Network
-            if iteration > 0:
-                trainer.next_iteration(len(actual_cl))
+            if iteration > 0 and actual_cl[0] in new_class:
+                print(len(actual_cl), actual_cl)
+                trainer.next_iteration(len(actual_cl)) #adiciona novas classes ao deepNCM
                 network.to(device)
 
             # Start iteration
             print(f'Batch of classes number {iteration + 1} arrives ...')
             # Setup epoch and optimizer
-            epochs = opts.epochs_init if iteration == 0 else opts.epochs
+            epochs = opts.epochs_init if iteration == 0 else opts.epochs # epochs é 12 ou 6
 
-            learning_rate = opts.lr
+            learning_rate = 0.05#opts.lr #pode ser modificado
+
+
+
             if opts.nno:
                 wght_decay = 0.0
 
@@ -503,6 +515,9 @@ def main(opts, search_params=None):
 
             lr_strat = [epstrat * epochs // 100 for epstrat in epochs_strat]
             scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=lr_strat, gamma=lr_factor)
+            #lr_strat e lr_factor podem ser ajustados
+
+            print(f'\n learning rate: {learning_rate}\n lr strat: {lr_strat}\n lr_factor: {lr_factor}\n features_dw: {opts.features_dw}\n')
 
             # restore checkpoint after training
             if opts.restore_ckpt and iteration == 0:
@@ -516,17 +531,24 @@ def main(opts, search_params=None):
                 state['model_state']['linear.variance'].unsqueeze_(0)
                 network.load_state_dict(state['model_state'])
                 epochs = 0
-
-            subset = list(train_set.samples)
-            random.shuffle(subset)
+            '''
+            subset = list(train_set.samples) #carrega as amostras de treino
+            random.shuffle(subset) #embaralha as amostras de treino
             subset_train_set = LightFilteredDatasetFolder(samples=subset[start:end],
                                                           target_transform=class_dict, transform=None)
+            #define um novo conjunto de dados referente a um subconjunto do treino
 
             subset_trainloader = DataLoader(subset_train_set, batch_size=batch_size, shuffle=True,
-                                     num_workers=opts.workers, sampler=None)
+                                            num_workers=opts.workers, sampler=None)
+            '''
+            subset_trainloader = []
             for epoch in range(epochs):
                 trainer.train(epoch, trainloader, subset_trainloader, optimizer, class_dict, iteration)
                 scheduler.step()
+
+            if iteration > 0:
+                known_classes = np.append(known_classes,new_class) #ADICIONA A CLASSE NOVA AO VETOR
+                print('TESTE', known_classes)
 
             # save checkpoint after training
             if opts.save_ckpt and (iteration == 0 or iteration == icl_steps - 1):
@@ -534,22 +556,6 @@ def main(opts, search_params=None):
                 ckpt_path = f"checkpoints/{opts.dataset}/{opts.name}_ordine{iteration_total}_{iteration}"
                 save_ckpt(ckpt_path, network, trainer)
 
-            # ## VALIDATION PHASE ###
-            if not opts.no_tau_val:
-                # add exemplars to val dataset
-                if iteration > 0:
-                    ex_samples_val = exemplar_handler.get_exemplar_samples(train=False)
-                    val_set_tau.samples.extend(ex_samples_val)
-                print("Starting threshold(s) validation...")
-                # dataset
-                validloader = torch.utils.data.DataLoader(val_set_tau, batch_size=args.valid_batchsize, shuffle=False,
-                                                          num_workers=args.workers)
-                # optimizer
-                valid_optimizer = optim.SGD([trainer.tau], lr=args.tau_lr, momentum=0.9, weight_decay=wght_decay,
-                                            nesterov=False)
-
-                for epoch in range(opts.epochs_val):
-                    trainer.valid(epoch, validloader, valid_optimizer, iteration, class_dict)
 
             # ## EXEMPLARS MANAGEMENT ###
             known_cl = last_class  # number of total known classes
@@ -557,33 +563,11 @@ def main(opts, search_params=None):
             exemplars_m = m * opts.exemplars_m
             valid_m = m * opts.valid_m
 
-            # Reduce exemplar sets for known classes
-            if iteration > 0 and not opts.nno:
-                exemplar_handler.reduce_exemplar_sets(exemplars_m, valid_m)
-            # Load exemplars for the classes known until now
-            if not opts.nno:
-                print(f"Constructing exemplar set for class:", end=" ")
-                for y in range(start_class, last_class):
-                    print(f"{y}", end=" ")
 
-                    # Training exemplar
-                    class_set = LightFilteredDatasetFolder(samples=train_set.get_samples_class(order[y]),
-                                                           target_transform=None, transform=transform_test)
-                    loader = torch.utils.data.DataLoader(class_set, batch_size=batch_size, shuffle=False,
-                                                         num_workers=args.workers)
-                    exemplar_handler.construct_exemplar_set(loader, exemplars_m, y, type='train')
-
-                    if not opts.no_tau_val:
-                        # Aggiunge agli exemplars-validation
-                        class_set = LightFilteredDatasetFolder(samples=val_set_tau.get_samples_class(order[y]),
-                                                               target_transform=None, transform=transform_test)
-                        loader = torch.utils.data.DataLoader(class_set, batch_size=batch_size, shuffle=False,
-                                                             num_workers=args.workers)
-                        exemplar_handler.construct_exemplar_set(loader, valid_m, y, type='val')
-                print(f"Done")
 
             # ## TEST ###
             for test_dataset in test_datasets:
+                '''
                 # Testing from class 0 to the latest learned one
                 test_set = opts.data_class(root=test_dataset, split='val' if opts.search else 'test',
                                            classes=order[range(0, last_class)], target_transform=class_dict,
@@ -591,6 +575,9 @@ def main(opts, search_params=None):
 
                 testloader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False,
                                                          num_workers=opts.workers)
+
+                #carrega o conjunto de teste considerando as classes até entao conhecidas pelo modelo e entao usa-se um dataloader para dividir
+                #o dataset em batches
 
                 acc = trainer.test_closed_world(testloader)
                 top1_acc_list[test_dataset][iteration, 0, iteration_total] = acc
@@ -610,8 +597,32 @@ def main(opts, search_params=None):
                     acc, precision, recall, f1score, rejected, unk = trainer.test_open_set(testloader, last_class)
 
                     top1_acc_list[test_dataset][iteration, 1 + i, iteration_total] = acc
+                '''
+                # Testing from class 0 to the latest learned one
 
-                logger.log_test(top1_acc_list[test_dataset][iteration, :, iteration_total], iteration, test_dataset)
+                test_set = opts.data_class(root=test_dataset, split='val' if opts.search else 'test',
+                                           classes=order, target_transform=class_dict,
+                                           transform=transform_test)
+                if iteration != 0:
+                    for j in del_objs:
+                        test_set.samples = np.delete(np.array(test_set.samples), j,axis=0)
+
+                    test_set.samples = [(z[0], int(z[1])) for z in test_set.samples.tolist()]
+
+                datas = [h[1] for h in test_set.samples]
+                print(f'test set: {np.unique(datas,return_counts=True)}')
+
+                testloader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False,
+                                                         num_workers=opts.workers)
+
+                # carrega o conjunto de teste considerando as classes até entao conhecidas pelo modelo e entao usa-se um dataloader para dividir
+                # o dataset em batches
+
+                acc, rejected, sel_objs = trainer.test_OWR(testloader, class_count)
+                del_objs.append(sel_objs)
+
+                #top1_acc_list[test_dataset][iteration, 1 + i, iteration_total] = acc
+                #logger.log_test(top1_acc_list[test_dataset][iteration, :, iteration_total], iteration, test_dataset)
 
         # SAVE RESULTS ###
         # File results
@@ -659,20 +670,20 @@ def main(opts, search_params=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="On the Challenges of OWR under Shifting Visual Domains")
-    parser.add_argument("--batch_size", type=int, default=-1,  # 128
+    parser.add_argument("--batch_size", type=int, default=15,  # 10
                         help="Batch size (both for training and test)")
     parser.add_argument("--valid_batchsize", help="Batch size for validation", type=int, default=-1)
-    parser.add_argument("--memory", help="Memory per class at the end", type=int, default=2000)
+    parser.add_argument("--memory", help="Memory per class at the end", type=int, default=200)#200
 
     parser.add_argument("--seed", help="Seed to use for the run", type=int, default=1993)
     parser.add_argument("--no_relu", help="Whether to use relu in the last block of resnet", action='store_true',
                         default=False)
 
     parser.add_argument("--logs", help="Name of log folder", type=str, default='logs')
-    parser.add_argument("--orders", help="Number of orders", type=int, default=5)
+    parser.add_argument("--orders", help="Number of orders", type=int, default=2)
     parser.add_argument("--name", help="Name of the experiments", type=str, default='exp')
     parser.add_argument("--dataset", help="Name of the dataset used for training", type=str,
-                        choices=['rgbd-dataset', 'arid_40k_dataset_crops', 'synARID_crops_square'])
+                        choices=['dataset-1', 'arid_40k_dataset_crops'])
     parser.add_argument("--test", help="Name of the dataset(s) used for testing", nargs='+', type=str, default='all')
     parser.add_argument("--dataset_path", help="Where data are located", type=str, default='data')
     parser.add_argument("--workers", help="Number of workers for data loader", type=int, default=2)
@@ -698,7 +709,8 @@ if __name__ == '__main__':
     parser.add_argument("--validation_size", help="Number of samples for held out dataset", type=int, default=50)
 
     # PIPELINE
-    parser.add_argument("--search", help="Whether to perform initial grid search or not", default=False, action='store_true')
+    parser.add_argument("--search", help="Whether to perform initial grid search or not", default=False,
+                        action='store_true')
     parser.add_argument("--config", help="Name of configuration to load", type=str, default=None)
 
     # TAU METHODS
@@ -708,6 +720,8 @@ if __name__ == '__main__':
                         default=False, action='store_true')
     parser.add_argument("--nno", help="Use shallow NNO method? Default no",
                         default=False, action='store_true')
+    parser.add_argument("--ss_weight", help="NON existing parameter",
+                        default=False, action='store_true')
     parser.add_argument("--multiple_taus", help="Whether to use only one global tau or one tau per class",
                         action='store_false', default=True)
     parser.add_argument("--bdoc", help="Use bdoc by clustering method", action='store_true', default=False)
@@ -715,7 +729,8 @@ if __name__ == '__main__':
     # DOMAIN ADAPTATION METHODS
     parser.add_argument("--rsda", help="Use RSDA by Volpi et all", action='store_true', default=False)
     parser.add_argument("--ssw", help="Self supervised weight for Rotation Task", type=float, default=0.)
-    parser.add_argument("--self_challenging", help="Use self challenging (SC) for DA", action='store_true', default=False)
+    parser.add_argument("--self_challenging", help="Use self challenging (SC) for DA", action='store_true',
+                        default=False)
 
     # checkpoints
     parser.add_argument("--save_ckpt", help="Whether to save the model after the training",

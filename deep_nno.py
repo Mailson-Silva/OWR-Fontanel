@@ -6,7 +6,7 @@ class DeepNNO:
         self.tau = tau
         self.factor = factor
         self.device = device
-        self.compute_tau_fn = self.compute_tau_bm # if bm else self.compute_tau
+        self.compute_tau_fn = self.compute_tau_bm if bm else self.compute_tau
         self.online = online
         self.counter3 = torch.zeros(1, device=self.device)
 
@@ -37,7 +37,7 @@ class DeepNNO:
 
     def compute_tau(self, x, y, i, alpha=None, w=None):
         mask = (i == y.data).view(-1).float()
-        mask = mask.cuda()
+        mask = mask#.cuda()
         N = mask.sum()
         if N == 0:
             return 0, 0
