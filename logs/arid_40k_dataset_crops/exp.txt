@@ -1,0 +1,84 @@
+
+
+
+Order 0:
+
+Closed world without rejection
+44.374 | 29.313 | 25.516 | 19.086 | 
+
+Closed world with rejection
+14.771 | 12.983 | 11.770 | 9.714 | 
+
+Open set with 5 unknown classes
+84.606 | 76.939 | 69.183 | 66.330 | 85.822 | 78.002 | 71.536 | 68.314 | 87.055 | 80.169 | 70.245 | 66.228 | 87.311 | 80.167 | 70.299 | 65.935 | 
+
+
+
+
+Order 1:
+
+Closed world without rejection
+37.583 | 32.937 | 27.605 | 25.285 | 
+
+Closed world with rejection
+14.339 | 13.036 | 13.116 | 13.200 | 
+
+Open set with 5 unknown classes
+89.606 | 70.932 | 58.638 | 51.828 | 85.981 | 72.929 | 64.432 | 59.146 | 85.070 | 72.973 | 64.208 | 59.647 | 86.491 | 73.403 | 65.164 | 60.820 | 
+
+
+
+
+Order 2:
+
+Closed world without rejection
+28.680 | 24.718 | 21.326 | 16.618 | 
+
+Closed world with rejection
+6.034 | 7.688 | 8.934 | 7.499 | 
+
+Open set with 5 unknown classes
+82.131 | 76.732 | 69.734 | 67.567 | 84.759 | 78.192 | 71.257 | 67.336 | 84.968 | 77.660 | 71.715 | 68.421 | 83.221 | 76.478 | 69.594 | 66.505 | 
+
+
+
+
+Order 3:
+
+Closed world without rejection
+48.127 | 37.166 | 28.441 | 21.209 | 
+
+Closed world with rejection
+11.180 | 10.205 | 9.726 | 8.778 | 
+
+Open set with 5 unknown classes
+85.954 | 75.702 | 69.829 | 63.262 | 85.758 | 75.957 | 71.542 | 64.829 | 82.684 | 74.890 | 70.609 | 64.945 | 82.663 | 75.377 | 71.353 | 66.584 | 
+
+
+
+
+Order 4:
+
+Closed world without rejection
+40.342 | 39.343 | 29.292 | 24.089 | 
+
+Closed world with rejection
+18.596 | 22.809 | 18.782 | 15.520 | 
+
+Open set with 5 unknown classes
+88.172 | 79.902 | 75.401 | 70.482 | 88.333 | 80.021 | 73.632 | 69.466 | 86.651 | 79.695 | 73.203 | 69.069 | 85.683 | 77.460 | 71.596 | 66.676 | 
+
+
+
+
+Order 0:
+
+Closed world without rejection
+44.374 | 29.313 | 25.516 | 19.086 | 
+
+Closed world with rejection
+14.771 | 12.983 | 11.770 | 9.714 | 
+
+Open set with 5 unknown classes
+84.606 | 76.939 | 69.183 | 66.330 | 85.822 | 78.002 | 71.536 | 68.314 | 87.055 | 80.169 | 70.245 | 66.228 | 87.311 | 80.167 | 70.299 | 65.935 | 
+
